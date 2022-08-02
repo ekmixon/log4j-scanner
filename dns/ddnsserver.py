@@ -24,7 +24,7 @@ domain_name = "test.example.com"
 
 class DomainName(str):
     def __getattr__(self, item):
-        return DomainName(item + '.' + self)
+        return DomainName(f'{item}.{self}')
 
 D = DomainName(domain_name)
 IP = '127.0.0.1'
@@ -67,7 +67,7 @@ def dns_response(data):
     qtype = request.q.qtype
     qt = QTYPE[qtype]
 
-    if qn == D or qn.endswith('.' + D):
+    if qn == D or qn.endswith(f'.{D}'):
 
         for name, rrs in records.items():
             if name == qn:
@@ -138,7 +138,7 @@ def main():
     parser.add_argument('--port', default=53, type=int, help='The port to listen on.')
     parser.add_argument('--tcp', action='store_true', help='Listen to TCP connections.')
     parser.add_argument('--udp', action='store_true', help='Listen to UDP datagrams.')
-    
+
     args = parser.parse_args()
 
     if domain_name == "test.example.com":
@@ -157,7 +157,10 @@ def main():
         thread = threading.Thread(target=s.serve_forever)  # that thread will start one more thread for each request
         thread.daemon = True  # exit the server thread when the main thread terminates
         thread.start()
-        print("%s server loop running in thread: %s" % (s.RequestHandlerClass.__name__[:3], thread.name))
+        print(
+            f"{s.RequestHandlerClass.__name__[:3]} server loop running in thread: {thread.name}"
+        )
+
 
     try:
         while 1:

